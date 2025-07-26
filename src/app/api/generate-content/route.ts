@@ -2,8 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { LLM_CONFIG, getModelConfig, getHeaders } from '@/config/llm';
 
 export async function POST(request: NextRequest) {
+  // Utility to extract the first JSON object from a string
+  function extractFirstJsonObject(str: string): string {
+    const firstBrace = str.indexOf('{');
+    if (firstBrace === -1) throw new Error('No JSON object found');
+    let open = 0, start = -1, end = -1;
+    for (let i = firstBrace; i < str.length; i++) {
+      if (str[i] === '{') {
+        if (open === 0) start = i;
+        open++;
+      } else if (str[i] === '}') {
+        open--;
+        if (open === 0) {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+    if (start !== -1 && end !== -1) {
+      return str.slice(start, end);
+    }
+    throw new Error('No complete JSON object found');
+  }
+
   try {
-    const { text, apiKey } = await request.json();
+    const { text, apiKey, skillLevel } = await request.json();
 
     if (!text || !apiKey) {
       return NextResponse.json(
@@ -21,15 +44,21 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `You are an expert research paper analyzer. Extract and structure the following information from the provided research paper text:
+            content: `You are an expert research paper analyzer. Your task is to explain complex research concepts at a ${skillLevel} level. 
+
+For high school students: Use simple language, avoid jargon, explain basic concepts, and provide real-world analogies.
+For undergraduate students: Use moderate technical language, explain intermediate concepts, and provide context for advanced topics.
+For graduate students: Use technical language, assume familiarity with advanced concepts, and focus on nuanced analysis.
+
+Extract and structure the following information from the provided research paper text:
 
 1. Title: Extract the paper title
 2. Authors: Extract author names
 3. Abstract: Extract or summarize the abstract
-4. Simplified Summary: Create a clear, non-technical summary (2-3 sentences)
-5. Key Points: Extract 4-6 main points from the paper
+4. Simplified Summary: Create a clear summary appropriate for ${skillLevel} level (2-3 sentences)
+5. Key Points: Extract 4-6 main points from the paper, explained at ${skillLevel} level
 6. Visual Elements: Suggest 2-3 relevant figures/diagrams that would help explain the concepts
-7. Deep Dive Analysis: Provide detailed analysis in these categories:
+7. Deep Dive Analysis: Provide detailed analysis in these categories, tailored for ${skillLevel} level:
    - Methodology: Detailed explanation of the research methods used
    - Results: Key findings and experimental outcomes
    - Implications: Practical and theoretical implications of the research
@@ -83,7 +112,14 @@ Format your response as JSON with the following structure:
     // Parse the JSON response from the LLM
     let parsedContent;
     try {
-      parsedContent = JSON.parse(content);
+      let jsonString = content;
+      try {
+        jsonString = extractFirstJsonObject(content);
+      } catch (e) {
+        // fallback: try to parse as-is
+        console.warn('Could not extract JSON object, trying raw content:', e);
+      }
+      parsedContent = JSON.parse(jsonString);
       console.log('Successfully parsed JSON:', parsedContent);
     } catch (parseError) {
       console.error('JSON parsing error:', parseError);

@@ -3,7 +3,7 @@ import { LLM_CONFIG, getModelConfig, getHeaders } from '@/config/llm';
 
 export async function POST(request: NextRequest) {
   try {
-    const { content, apiKey } = await request.json();
+    const { content, apiKey, skillLevel } = await request.json();
 
     if (!content || !apiKey) {
       return NextResponse.json(
@@ -21,7 +21,13 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `You are an expert in research applications and technology transfer. Based on the research paper content, generate practical applications in the following categories:
+            content: `You are an expert in research applications and technology transfer. Based on the research paper content, generate practical applications appropriate for ${skillLevel} level students.
+
+For high school students: Focus on simple, hands-on projects, basic industry applications, and introductory research concepts.
+For undergraduate students: Focus on moderate complexity projects, practical industry applications, and intermediate research opportunities.
+For graduate students: Focus on advanced projects, cutting-edge industry applications, and sophisticated research directions.
+
+Generate practical applications in the following categories:
 
 1. Project Ideas: 3-4 hands-on projects students can build
 2. Industry Applications: 3-4 real-world industry use cases

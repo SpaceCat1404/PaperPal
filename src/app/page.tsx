@@ -167,7 +167,7 @@ const PaperPal = () => {
   };
 
   // Generate quiz questions
-  const generateQuizQuestions = async (content: string): Promise<QuizQuestion[]> => {
+  const generateQuizQuestions = async (content: string, skillLevel: string): Promise<QuizQuestion[]> => {
     setProcessingStage('Generating quiz questions...');
     
     try {
@@ -179,6 +179,7 @@ const PaperPal = () => {
         body: JSON.stringify({
           content: content,
           apiKey: apiKey,
+          skillLevel: skillLevel,
         }),
       });
 
@@ -218,7 +219,7 @@ const PaperPal = () => {
   };
 
   // Generate applications
-  const generateApplications = async (content: string): Promise<Applications> => {
+  const generateApplications = async (content: string, skillLevel: string): Promise<Applications> => {
     setProcessingStage('Generating real-world applications...');
     
     try {
@@ -230,6 +231,7 @@ const PaperPal = () => {
         body: JSON.stringify({
           content: content,
           apiKey: apiKey,
+          skillLevel: skillLevel,
         }),
       });
 
@@ -321,7 +323,7 @@ const PaperPal = () => {
 
         // Try to generate quiz questions (don't fail if this doesn't work)
         try {
-          const quizData = await generateQuizQuestions(extractedText);
+          const quizData = await generateQuizQuestions(extractedText, skillLevel);
           setQuizQuestions(quizData);
         } catch (error) {
           console.warn('Quiz generation failed, using fallback:', error);
@@ -330,7 +332,7 @@ const PaperPal = () => {
 
         // Try to generate applications (don't fail if this doesn't work)
         try {
-          const applicationsData = await generateApplications(extractedText);
+          const applicationsData = await generateApplications(extractedText, skillLevel);
           setApplications(applicationsData);
         } catch (error) {
           console.warn('Applications generation failed, using fallback:', error);
@@ -495,18 +497,78 @@ const PaperPal = () => {
     </div>
   );
 
+  const handleSkillLevelChange = async (newSkillLevel: 'undergraduate' | 'highschool' | 'graduate') => {
+    setSkillLevel(newSkillLevel);
+    
+    // If we have extracted text, regenerate content with new skill level
+    if (extractedText && apiKey) {
+      setIsProcessing(true);
+      setProcessingStage('Regenerating content for new skill level...');
+      
+      try {
+        // Generate content using LLM with new skill level
+        const generatedContent = await generateContentFromText(extractedText, newSkillLevel);
+        // Fetch relevant images
+        const images = await fetchRelevantImages(`${generatedContent.title} ${generatedContent.keyPoints?.join(' ')} diagram flowchart`);
+        // Combine all data
+        const paperData: PaperData = {
+          ...generatedContent,
+          extractedText: extractedText,
+          figures: images.map((url, idx) => ({
+            id: idx + 1,
+            title: `Relevant Diagram ${idx + 1}`,
+            description: 'Diagram or flowchart relevant to the paper',
+            url,
+          })),
+        };
+
+        setPaperData(paperData);
+
+        // Try to generate quiz questions with new skill level
+        try {
+          const quizData = await generateQuizQuestions(extractedText, newSkillLevel);
+          setQuizQuestions(quizData);
+        } catch (error) {
+          console.warn('Quiz generation failed, using fallback:', error);
+        }
+
+        // Try to generate applications with new skill level
+        try {
+          const applicationsData = await generateApplications(extractedText, newSkillLevel);
+          setApplications(applicationsData);
+        } catch (error) {
+          console.warn('Applications generation failed, using fallback:', error);
+        }
+        
+        setIsProcessing(false);
+      } catch (error) {
+        console.error('Error regenerating content:', error);
+        setIsProcessing(false);
+        alert('Error regenerating content. Please try again.');
+      }
+    }
+  };
+
   const SkillLevelSelector = () => (
     <div className="flex justify-center mb-6">
-      <label className="mr-2 font-medium text-gray-700">Explain for:</label>
-      <select
-        value={skillLevel}
-        onChange={e => setSkillLevel(e.target.value as any)}
-        className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-      >
-        <option value="highschool">High School Student</option>
-        <option value="undergraduate">Undergraduate Student</option>
-        <option value="graduate">Graduate Student</option>
-      </select>
+      <div className="flex items-center space-x-3 bg-blue-50 rounded-lg p-3 border border-blue-200">
+        <label className="font-medium text-blue-900">Reading Level:</label>
+        <select
+          value={skillLevel}
+          onChange={e => handleSkillLevelChange(e.target.value as any)}
+          className="p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+        >
+          <option value="highschool">High School Student</option>
+          <option value="undergraduate">Undergraduate Student</option>
+          <option value="graduate">Graduate Student</option>
+        </select>
+        {isProcessing && (
+          <div className="flex items-center space-x-2 text-blue-600">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <span className="text-sm">Regenerating...</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 
@@ -526,9 +588,16 @@ const PaperPal = () => {
     return (
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-          <div className="flex items-center space-x-2 mb-4">
-            <Sparkles className="h-5 w-5 text-blue-600" />
-            <h2 className="text-2xl font-bold text-gray-900">{paperData?.title}</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <Sparkles className="h-5 w-5 text-blue-600" />
+              <h2 className="text-2xl font-bold text-gray-900">{paperData?.title}</h2>
+            </div>
+            <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+              {skillLevel === 'highschool' ? 'High School Level' : 
+               skillLevel === 'undergraduate' ? 'Undergraduate Level' : 
+               'Graduate Level'}
+            </div>
           </div>
           <p className="text-gray-600 mb-4">by {paperData?.authors}</p>
           
@@ -590,9 +659,16 @@ const PaperPal = () => {
     return (
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center space-x-2 mb-6">
-            <BookOpen className="h-5 w-5 text-purple-600" />
-            <h2 className="text-2xl font-bold text-gray-900">Deep Dive Analysis</h2>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-2">
+              <BookOpen className="h-5 w-5 text-purple-600" />
+              <h2 className="text-2xl font-bold text-gray-900">Deep Dive Analysis</h2>
+            </div>
+            <div className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
+              {skillLevel === 'highschool' ? 'High School Level' : 
+               skillLevel === 'undergraduate' ? 'Undergraduate Level' : 
+               'Graduate Level'}
+            </div>
           </div>
           
           <div className="space-y-8">
@@ -800,11 +876,18 @@ const PaperPal = () => {
               <HelpCircle className="h-5 w-5 text-orange-600" />
               <h2 className="text-2xl font-bold text-gray-900">Knowledge Check</h2>
             </div>
-            {!showResults && (
-              <div className="text-sm text-gray-500">
-                Question {currentQuestion + 1} of {quizQuestions.length}
+            <div className="flex items-center space-x-3">
+              <div className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
+                {skillLevel === 'highschool' ? 'High School Level' : 
+                 skillLevel === 'undergraduate' ? 'Undergraduate Level' : 
+                 'Graduate Level'}
               </div>
-            )}
+              {!showResults && (
+                <div className="text-sm text-gray-500">
+                  Question {currentQuestion + 1} of {quizQuestions.length}
+                </div>
+              )}
+            </div>
           </div>
           
           {!showResults ? (
@@ -880,9 +963,16 @@ const PaperPal = () => {
     return (
       <div className="max-w-4xl mx-auto">
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center space-x-2 mb-6">
-            <Lightbulb className="h-5 w-5 text-yellow-600" />
-            <h2 className="text-2xl font-bold text-gray-900">Real-World Applications</h2>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-2">
+              <Lightbulb className="h-5 w-5 text-yellow-600" />
+              <h2 className="text-2xl font-bold text-gray-900">Real-World Applications</h2>
+            </div>
+            <div className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
+              {skillLevel === 'highschool' ? 'High School Level' : 
+               skillLevel === 'undergraduate' ? 'Undergraduate Level' : 
+               'Graduate Level'}
+            </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

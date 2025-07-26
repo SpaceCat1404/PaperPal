@@ -3,7 +3,7 @@ import { LLM_CONFIG, getModelConfig, getHeaders } from '@/config/llm';
 
 export async function POST(request: NextRequest) {
   try {
-    const { content, apiKey } = await request.json();
+    const { content, apiKey, skillLevel } = await request.json();
 
     if (!content || !apiKey) {
       return NextResponse.json(
@@ -21,7 +21,13 @@ export async function POST(request: NextRequest) {
         messages: [
           {
             role: 'system',
-            content: `You are an expert educator creating quiz questions for a research paper. Generate 5 diverse questions based on the paper content:
+            content: `You are an expert educator creating quiz questions for a research paper at a ${skillLevel} level. 
+
+For high school students: Create questions that test basic understanding, use simple language, and focus on fundamental concepts.
+For undergraduate students: Create questions that test intermediate understanding, use moderate technical language, and focus on key concepts and applications.
+For graduate students: Create questions that test advanced understanding, use technical language, and focus on nuanced analysis and critical thinking.
+
+Generate 5 diverse questions based on the paper content:
 
 1. 3 multiple-choice questions testing key concepts
 2. 2 text-based questions requiring explanation
